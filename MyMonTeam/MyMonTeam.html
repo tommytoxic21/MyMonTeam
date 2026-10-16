@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyMonTeam</title>
+    <link rel="stylesheet" href="MyMonTeam.css">
+</head>
+<body>
+    <div class="page">
+        <header>
+            <div class="brand">
+                <div class="pokeball" aria-hidden="true"></div>
+                <div>
+                    <h1>MyMonTeam</h1>
+                    <p class="subtitle">Build a six-Pokémon squad and calculate the matchup.</p>
+                </div>
+            </div>
+            <div class="gen-select">
+                <label for="generation">Generation</label>
+                <select id="generation" name="generation">
+                    <option value="1" selected>Generation 1</option>
+                    <option value="2">Generation 2</option>
+                    <option value="3">Generation 3</option>
+                    <option value="4">Generation 4</option>
+                    <option value="5">Generation 5</option>
+                    <option value="6">Generation 6</option>
+                    <option value="7">Generation 7</option>
+                    <option value="8">Generation 8</option>
+                    <option value="9">Generation 9</option>
+                </select>
+            </div>
+        </header>
+
+        <section class="search">
+            <label for="pokemon-search">Search Pokémon</label>
+            <input id="pokemon-search" type="search" name="pokemon-search" placeholder="Search Pokémon">
+        </section>
+        
+        <main class="team-grid" id="team">
+
+        </main>
+
+        <div class="actions">
+            <button class="calculate" type="button">Calculate</button>
+        </div>
+    </div>
+
+    <script src="MyMonTeam.js"></script>
+</body>
+</html>
