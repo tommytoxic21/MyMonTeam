@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MyMonTeam</title>
     <link rel="stylesheet" href="MyMonTeam.css">
 </head>
+
 <body>
     <div class="page">
         <header>
@@ -34,9 +36,11 @@
 
         <section class="search">
             <label for="pokemon-search">Search Pokémon</label>
-            <input id="pokemon-search" type="search" name="pokemon-search" placeholder="Search Pokémon">
+            <input id="pokemon-search" type="search" name="pokemon-search" placeholder="Search Pokémon"
+                autocomplete="off">
+            <div id="search-results"></div>
         </section>
-        
+
         <main class="team-grid" id="team">
 
         </main>
@@ -48,4 +52,5 @@
 
     <script src="MyMonTeam.js"></script>
 </body>
+
 </html>
