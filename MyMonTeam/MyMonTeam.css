@@ -1,3 +1,6 @@
+/*
+   Theme Variables
+   */
 :root {
     --bg: #16141f;
     --panel: #2c2940;
@@ -6,12 +9,23 @@
     --muted: #9b95ab;
     --accent: #8b7cb8;
     --slot: #12101a;
+
+    --radius-input: 10px;
+    --radius-card: 16px;
+    --radius-results: 14px;
+    --transition: 0.15s ease;
 }
 
+/* Apply consistent sizing to all elements. */
 * {
     box-sizing: border-box;
 }
 
+
+
+/* 
+   Page Layout
+   */
 body {
     margin: 0;
     min-height: 100vh;
@@ -20,12 +34,18 @@ body {
     background: var(--bg);
 }
 
+/* Center the page and limit its maximum width. */
 .page {
     max-width: 1180px;
     margin: 0 auto;
     padding: 32px 20px 64px;
 }
 
+
+
+/* 
+   Header and Branding
+   */
 header {
     display: flex;
     flex-wrap: wrap;
@@ -35,43 +55,56 @@ header {
     margin-bottom: 28px;
 }
 
+/* Align the Poké Ball logo with the site title. */
 .brand {
     display: flex;
     align-items: center;
     gap: 14px;
 }
 
+/* Create the Poké Ball logo using CSS. */
 .pokeball {
+    position: relative;
     width: 42px;
     height: 42px;
-    border-radius: 50%;
-    background: linear-gradient(to bottom, #ef4444 49%, #f8fafc 51%);
     border: 3px solid #f8fafc;
-    position: relative;
+    border-radius: 50%;
+    background: linear-gradient(to bottom,
+            #ef4444 49%,
+            #f8fafc 51%);
     box-shadow: 0 0 0 3px #111a2b;
 }
 
+/* Add the center button to the Poké Ball logo. */
 .pokeball::after {
-    content: "";
     position: absolute;
     inset: 14px;
+    content: "";
+    border: 3px solid #111a2b;
     border-radius: 50%;
     background: #f8fafc;
-    border: 3px solid #111a2b;
 }
 
+/* Main site title. */
 h1 {
     margin: 0;
     font-size: 2rem;
     letter-spacing: 0.04em;
 }
 
+/* Subtitle beneath the site title. */
 .subtitle {
     margin: 4px 0 0;
     color: var(--muted);
     font-size: 0.95rem;
 }
 
+
+
+/* 
+   Form Controls
+   */
+/* Generation selector layout. */
 .gen-select {
     display: flex;
     flex-direction: column;
@@ -79,34 +112,40 @@ h1 {
     min-width: 220px;
 }
 
+/* Shared styling for form labels. */
 label {
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
     color: var(--muted);
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
 }
 
+/* Shared styling for the generation selector
+   and Pokémon search input. */
 select,
 input[type="search"] {
     width: 100%;
-    color: var(--text);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-input);
+    color: var(--text);
     font: inherit;
 }
 
+/* Customize the generation dropdown. */
 select {
     appearance: none;
-    background: var(--slot) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%239aa8c2' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 14px center;
     padding: 12px 38px 12px 14px;
+    background: var(--slot) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%239aa8c2' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 14px center;
     cursor: pointer;
 }
 
+/* Style the Pokémon search input. */
 input[type="search"] {
-    background: var(--slot);
     padding: 12px 14px;
+    background: var(--slot);
 }
 
+/* Highlight form controls when hovered or focused. */
 select:hover,
 select:focus,
 input[type="search"]:hover,
@@ -115,112 +154,166 @@ input[type="search"]:focus {
     border-color: var(--accent);
 }
 
-.team-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 18px;
-}
 
-.mon-card {
-    min-height: 220px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 16px;
-}
 
+/* 
+   Pokémon Search and Autocomplete
+   */
+/* Position the search dropdown relative to the
+   search section so it overlays the page content. */
 .search {
+    position: relative;
+    z-index: 10;
     display: flex;
     flex-direction: column;
     gap: 8px;
     margin-top: 32px;
     margin-bottom: 64px;
-    position: relative;
-    z-index: 10;
 }
 
+/* Floating autocomplete results panel. */
+#search-results {
+    position: absolute;
+    z-index: 10;
+    top: 100%;
+    right: 0;
+    left: 0;
+    margin-top: 6px;
+    border-radius: var(--radius-results);
+    background: rgba(44, 41, 64, 0.96);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+}
+
+/* Individual Pokémon search results. */
+.pokemon-result {
+    padding: 12px 16px;
+    color: var(--text);
+    cursor: pointer;
+    transition: background var(--transition);
+}
+
+/* Separate consecutive results with subtle borders. */
+.pokemon-result+.pokemon-result {
+    border-top: 1px solid var(--line);
+}
+
+/* Highlight a result when the mouse hovers over it. */
+.pokemon-result:hover {
+    background: rgba(139, 124, 184, 0.25);
+}
+
+/* Visually distinguish the currently selected result. */
+.pokemon-result.highlighted {
+    background: rgba(139, 124, 184, 0.4);
+}
+
+/* Prevent the "No Pokémon found" message from
+   displaying a pointer cursor. */
+.pokemon-result[style*="cursor: default"] {
+    cursor: default;
+}
+
+
+
+/* 
+   Team Grid and Pokémon Cards
+   */
+/* Arrange the six team slots in three columns. */
+.team-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+}
+
+/* Center the Pokémon content inside each card. */
+.mon-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 220px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+}
+
+/* Keep Pokémon sprites at a consistent size
+   without distorting their proportions. */
+.pokemon-sprite {
+    width: 140px;
+    height: 140px;
+    object-fit: contain;
+}
+
+/* Style Pokémon names displayed beneath sprites. */
+.pokemon-name {
+    margin: 0;
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 700;
+    text-transform: capitalize;
+}
+
+
+
+/* 
+   Calculate Button
+   */
+/* Center the calculate button beneath the team. */
 .actions {
     display: flex;
     justify-content: center;
     margin-top: 32px;
 }
 
+/* Main team calculation button. */
 .calculate {
     min-width: 240px;
+    padding: 14px 28px;
     border: 0;
     border-radius: 999px;
-    padding: 14px 28px;
+    color: #111a2b;
+    background: linear-gradient(180deg,
+            #fbbf24 0%,
+            #f59e0b 100%);
+    box-shadow: 0 8px 0 #b45309;
     font: inherit;
     font-size: 1.05rem;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #111a2b;
-    background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
     cursor: pointer;
-    box-shadow: 0 8px 0 #b45309;
 }
 
+/* Slightly brighten the button on hover. */
 .calculate:hover {
     filter: brightness(1.05);
 }
 
+/* Create a pressed-button effect when clicked. */
 .calculate:active {
     transform: translateY(3px);
     box-shadow: 0 5px 0 #b45309;
 }
 
+
+
+/* 
+   Responsive Layout
+   */
+/* Display two team columns on medium screens. */
 @media (max-width: 980px) {
     .team-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
+/* Stack team cards vertically on small screens. */
 @media (max-width: 640px) {
     .team-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
-}
-
-.pokemon-result {
-    padding: 10px 12px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    margin-bottom: 4px;
-    color: var(--text);
-    cursor: pointer;
-}
-
-.pokemon-result:hover {
-    background: var(--accent);
-}
-
-#search-results {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    margin-top: 4px;
-    max-height: 320px;
-    overflow-y: auto;
-    z-index: 10;
-}
-
-
-.pokemon-result {
-    padding: 10px 12px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    margin-bottom: 4px;
-    color: var(--text);
-    cursor: pointer;
-}
-
-.pokemon-result:hover {
-    background: var(--accent);
-}
-
-.pokemon-result[style*="cursor: default"] {
-    cursor: default;
 }
