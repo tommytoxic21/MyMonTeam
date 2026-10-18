@@ -4,15 +4,15 @@ MyMonTeam is a Pokémon team-building website currently in development. The goal
 
 ## Current Progress
 
-- A search bar that narrows down possible selections based on user input.
+- Fine-tuned the search bar from the previous version to include only Pokémon in the currently selected game.
 - The ability to select a Pokémon from the search bar, either through pressing the "Enter" key or a mouse input.
-- Displaying the Pokémon's sprite and name in the next available team slot.
+- Upgraded the displaying of sprites to be based on the selected game.
 
 ## Future Plans
 
 - Adding a feature to input the moves each Pokémon on the team currently has.
 - Giving functionality to the "calculate" button which will display various statistics about the team.
-- Implementing an option to change the current team layout.
+- Changing the game selector to act as a "Home Screen" for simplicity purposes.
 
 ## Technologies
 
