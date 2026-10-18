@@ -3,6 +3,7 @@
 const team = document.getElementById("team");
 const searchInput = document.getElementById("pokemon-search");
 const searchResults = document.getElementById("search-results");
+const gameSelect = document.getElementById("game-select");
 
 // Array used for storing Pokémon; initially empty
 let allPokemon = [];
@@ -16,6 +17,19 @@ const selectedPokemon = Array(6).fill(null);
 
 // An array for the HTMl elements for each team slot
 const teamSlots = [];
+
+// Finding the number of pokemon available in the generation
+const generationRanges = {
+    "generation-i": 151,
+    "generation-ii": 251,
+    "generation-iii": 386,
+    "generation-iv": 493,
+    "generation-v": 649,
+    "generation-vi": 721,
+    "generation-vii": 809,
+    "generation-viii": 905,
+    "generation-ix": 1025
+};
 
 
 
@@ -80,7 +94,8 @@ function displayResults(matches) {
     matches.forEach((pokemon, index) => {
         const result = document.createElement("div");
 
-        result.textContent = pokemon.name;
+        result.textContent = pokemon.name[0].toUpperCase() + 
+            pokemon.name.slice(1, pokemon.name.length);
         result.className = "pokemon-result";
 
         // Highlight the first result by default.
@@ -142,10 +157,14 @@ async function selectPokemon(pokemon) {
 
         const data = await response.json();
 
-        // Prefer official artwork, falling back to the regular sprite.
-        const sprite =
-            data.sprites.other?.["official-artwork"]?.front_default ||
-            data.sprites.front_default;
+        // Get the current generation the user selected
+        const game = gameSelect.selectedOptions[0].text.toLowerCase();
+        const gen = gameSelect.value;
+
+        // Set the sprite based on the generation and game
+        // If one is not found, use the default sprite
+        const sprite = data.sprites.versions?.[gen]?.[game]?.front_default 
+            || data.sprites.front_default;
 
         // Stop if no usable sprite is available.
         if (!sprite) {
@@ -171,7 +190,21 @@ async function selectPokemon(pokemon) {
         // Display the sprite and name in the corresponding team card.
         const card = teamSlots[slotIndex];
 
-        card.replaceChildren(image, name);
+        // Create the remove button.
+        const removeButton = document.createElement("button");
+        removeButton.className = "remove-pokemon";
+        removeButton.textContent = "×";
+        removeButton.type = "button";
+        removeButton.setAttribute("aria-label", `Remove ${pokemon.name}`);
+
+        // Remove the Pokémon when the button is clicked.
+        removeButton.addEventListener("click", () => {
+            selectedPokemon[slotIndex] = null;
+            card.replaceChildren();
+            card.setAttribute("aria-label", `Slot ${slotIndex + 1}`);
+        });
+
+        card.replaceChildren(image, name, removeButton);
         card.setAttribute(
             "aria-label",
             `Slot ${slotIndex + 1}: ${pokemon.name}`
@@ -202,10 +235,16 @@ searchInput.addEventListener("input", () => {
         return;
     }
 
+    // Get the selected game generation and the number of Pokémon
+    const gen = gameSelect.value;
+    const maxDex = generationRanges[gen];
+
     // Find matching Pokémon and display at most six results.
     const matches = allPokemon
-        .filter((pokemon) => pokemon.name.includes(query))
-        .slice(0, 6);
+        .filter((pokemon) => {
+            const id = Number(pokemon.url.split("/").filter(Boolean).pop());
+            return pokemon.name.includes(query) && id <= maxDex;
+    }).slice(0,6);
 
     displayResults(matches);
 });
@@ -215,6 +254,41 @@ searchInput.addEventListener("input", () => {
 // Keyboard Input Handling
 // Allow Enter to select the currently highlighted Pokémon
 searchInput.addEventListener("keydown", (event) => {
+
+    // Move the highlighted Pokémon with up and down arrow keys
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+
+        // Do nothing if there is nothing to select
+        if (searchResults.children.length === 0) {
+            return;
+        }
+
+        // Getting the direction to move the highlight
+        const direction = event.key === "ArrowUp" ? -1 : 1;
+        highlightedIndex += direction;
+
+        // Maintaining the bounds of the highlighted Pokémon
+        if (highlightedIndex < 0) {
+            highlightedIndex = 0;
+        }
+        else if (highlightedIndex >= searchResults.children.length) {
+            highlightedIndex = searchResults.children.length - 1;
+        }
+
+        // Highlight the Pokémon based on the current index + direction
+        searchResults
+            .querySelectorAll(".pokemon-result")
+            .forEach((item, index) => {
+                item.classList.remove("highlighted");
+                if (index === highlightedIndex) {
+                    item.classList.add("highlighted");
+                }
+            });
+
+        return;
+    }
+
     // Ignore keys other than Enter
     if (event.key !== "Enter") {
         return;
@@ -241,7 +315,8 @@ searchInput.addEventListener("keydown", (event) => {
     );
 
     const selected = matches.find(
-        (pokemon) => pokemon.name === highlightedResult.textContent
+        (pokemon) => (pokemon.name[0].toUpperCase() + pokemon.name.slice(1, pokemon.name.length))
+        === highlightedResult.textContent
     );
 
     // Add the Pokémon if a matching result was found.
