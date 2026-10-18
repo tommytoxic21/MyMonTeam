@@ -18,18 +18,22 @@
                     <p class="subtitle">Build a six-Pokémon squad and calculate the matchup.</p>
                 </div>
             </div>
-            <div class="gen-select">
-                <label for="generation">Generation</label>
-                <select id="generation" name="generation">
-                    <option value="1" selected>Generation 1</option>
-                    <option value="2">Generation 2</option>
-                    <option value="3">Generation 3</option>
-                    <option value="4">Generation 4</option>
-                    <option value="5">Generation 5</option>
-                    <option value="6">Generation 6</option>
-                    <option value="7">Generation 7</option>
-                    <option value="8">Generation 8</option>
-                    <option value="9">Generation 9</option>
+            <div class="game-select">
+                <label for="game">Game</label>
+                <select id="game-select" name="game-select">
+                    <option value="generation-i" selected>red-blue</option>
+                    <option value="generation-i">yellow</option>
+                    <option value="generation-ii">gold-silver</option>
+                    <option value="generation-ii">crystal</option>
+                    <option value="generation-iii">ruby-sapphire</option>
+                    <option value="generation-iii">emerald</option>
+                    <option value="generation-iii">firered-leafgreen</option>
+                    <option value="generation-iv">diamond-pearl</option>
+                    <option value="generation-iv">platinum</option>
+                    <option value="generation-iv">heartgold-soulsilver</option>
+                    <option value="generation-v">black-white</option>
+                    <option value="generation-vi">x-y</option>
+                    <option value="generation-vi">omega-ruby-alpha-sapphire</option>
                 </select>
             </div>
         </header>
@@ -37,7 +41,7 @@
         <section class="search">
             <label for="pokemon-search">Search Pokémon</label>
             <input id="pokemon-search" type="search" name="pokemon-search" placeholder="Search Pokémon"
-                autocomplete="off">
+                autocomplete="off" autocorrect="off" spellcheck="false">
             <div id="search-results"></div>
         </section>
 
