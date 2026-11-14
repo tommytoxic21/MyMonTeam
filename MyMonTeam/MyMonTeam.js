@@ -17,7 +17,6 @@ const team = document.getElementById("team");
 const searchInput = document.getElementById("pokemon-search");
 const searchResults = document.getElementById("search-results");
 const gameSelect = document.getElementById("game-select");
-const calculateButton = document.getElementById("calcButton");
 
 // Variables for the game and generation selection
 let game;
@@ -254,6 +253,7 @@ gameSelect.addEventListener("change", () => {
 
     // Call the function to set game and gen variables
     initializeGameAndGen();
+    updateTypeAnalysis();
 });
 
 
@@ -318,8 +318,7 @@ function displaySearchResults(matches) {
 }
 
 // A function that is called when the search bar becomes focused or detects input
-function updateSearch()
-{
+function updateSearch() {
     const query = searchInput.value.trim().toLowerCase();
 
     // Hide the dropdown when the search input is empty.
@@ -374,6 +373,7 @@ async function selectPokemon(pokemon) {
         }
 
         const data = await response.json();
+        analysisDetailCache.set(pokemon.url, Promise.resolve(data));
 
         // Set the sprite based on the generation and game
         // If one is not found, use the default sprite
@@ -429,6 +429,12 @@ async function selectPokemon(pokemon) {
             moveInput.addEventListener("input", () => {
                 const query = moveInput.value.trim().toLowerCase();
 
+                // Clear the previously selected move when edited.
+                if (selectedMoves[slotIndex][i - 1] !== null) {
+                    selectedMoves[slotIndex][i - 1] = null;
+                    updateTypeAnalysis();
+                }
+
                 if (query === "") {
                     moveResults.replaceChildren();
                     return;
@@ -438,7 +444,13 @@ async function selectPokemon(pokemon) {
                     .filter((move) => move.name.includes(query))
                     .slice(0, 6);
 
-                displayMoveResults(matches, moveInput, moveResults, slotIndex, i - 1);
+                displayMoveResults(
+                    matches,
+                    moveInput,
+                    moveResults,
+                    slotIndex,
+                    i - 1
+                );
             });
         }
 
@@ -455,6 +467,8 @@ async function selectPokemon(pokemon) {
             card.replaceChildren();
             card.setAttribute("aria-label", `Slot ${slotIndex + 1}`);
             selectedMoves[slotIndex] = Array(4).fill(null);
+
+            updateTypeAnalysis();
         });
 
         card.replaceChildren(image, name, movesContainer, removeButton);
@@ -468,6 +482,7 @@ async function selectPokemon(pokemon) {
         searchResults.replaceChildren();
         highlightedIndex = 0;
 
+        updateTypeAnalysis();
         console.log(`Added ${pokemon.name} to slot ${slotIndex + 1}.`);
     } catch (error) {
         // Report errors without crashing the application.
@@ -504,6 +519,7 @@ function displayMoveResults(matches, input, results, pokemonIndex, moveIndex) {
             results.replaceChildren();
 
             selectedMoves[pokemonIndex][moveIndex] = move;
+            updateTypeAnalysis();
         });
 
         results.appendChild(result);
@@ -517,8 +533,7 @@ function displayMoveResults(matches, input, results, pokemonIndex, moveIndex) {
 
 
 // Set game and gen variables
-function initializeGameAndGen()
-{
+function initializeGameAndGen() {
     // Format the selected game text to use in API calls
     game = gameSelect.selectedOptions[0].text.trim().toLowerCase().replace(" / ", "-")
         .replaceAll(" ", "-").replaceAll("'", "");
@@ -534,24 +549,24 @@ function initializeGameAndGen()
 // Offensive type chart:
 // strong = 2x damage, weak = 0.5x damage, immune = 0x damage
 const typeChart = {
-    normal:   { strong: [], weak: ["rock", "steel"], immune: ["ghost"] },
-    fire:     { strong: ["grass", "ice", "bug", "steel"], weak: ["fire", "water", "rock", "dragon"] },
-    water:    { strong: ["fire", "ground", "rock"], weak: ["water", "grass", "dragon"] },
+    normal: { strong: [], weak: ["rock", "steel"], immune: ["ghost"] },
+    fire: { strong: ["grass", "ice", "bug", "steel"], weak: ["fire", "water", "rock", "dragon"] },
+    water: { strong: ["fire", "ground", "rock"], weak: ["water", "grass", "dragon"] },
     electric: { strong: ["water", "flying"], weak: ["electric", "grass", "dragon"], immune: ["ground"] },
-    grass:    { strong: ["water", "ground", "rock"], weak: ["fire", "grass", "poison", "flying", "bug", "dragon", "steel"] },
-    ice:      { strong: ["grass", "ground", "flying", "dragon"], weak: ["fire", "water", "ice", "steel"] },
+    grass: { strong: ["water", "ground", "rock"], weak: ["fire", "grass", "poison", "flying", "bug", "dragon", "steel"] },
+    ice: { strong: ["grass", "ground", "flying", "dragon"], weak: ["fire", "water", "ice", "steel"] },
     fighting: { strong: ["normal", "ice", "rock", "dark", "steel"], weak: ["poison", "flying", "psychic", "bug", "fairy"], immune: ["ghost"] },
-    poison:   { strong: ["grass", "fairy"], weak: ["poison", "ground", "rock", "ghost"], immune: ["steel"] },
-    ground:   { strong: ["fire", "electric", "poison", "rock", "steel"], weak: ["grass", "bug"], immune: ["flying"] },
-    flying:   { strong: ["grass", "fighting", "bug"], weak: ["electric", "rock", "steel"] },
-    psychic:  { strong: ["fighting", "poison"], weak: ["psychic", "steel"], immune: ["dark"] },
-    bug:      { strong: ["grass", "psychic", "dark"], weak: ["fire", "fighting", "poison", "flying", "ghost", "steel", "fairy"] },
-    rock:     { strong: ["fire", "ice", "flying", "bug"], weak: ["fighting", "ground", "steel"] },
-    ghost:    { strong: ["psychic", "ghost"], weak: ["dark"], immune: ["normal"] },
-    dragon:   { strong: ["dragon"], weak: ["steel"], immune: ["fairy"] },
-    dark:     { strong: ["psychic", "ghost"], weak: ["fighting", "dark", "fairy"] },
-    steel:    { strong: ["ice", "rock", "fairy"], weak: ["fire", "water", "electric", "steel"] },
-    fairy:    { strong: ["fighting", "dragon", "dark"], weak: ["fire", "poison", "steel"] }
+    poison: { strong: ["grass", "fairy"], weak: ["poison", "ground", "rock", "ghost"], immune: ["steel"] },
+    ground: { strong: ["fire", "electric", "poison", "rock", "steel"], weak: ["grass", "bug"], immune: ["flying"] },
+    flying: { strong: ["grass", "fighting", "bug"], weak: ["electric", "rock", "steel"] },
+    psychic: { strong: ["fighting", "poison"], weak: ["psychic", "steel"], immune: ["dark"] },
+    bug: { strong: ["grass", "psychic", "dark"], weak: ["fire", "fighting", "poison", "flying", "ghost", "steel", "fairy"] },
+    rock: { strong: ["fire", "ice", "flying", "bug"], weak: ["fighting", "ground", "steel"] },
+    ghost: { strong: ["psychic", "ghost"], weak: ["dark"], immune: ["normal"] },
+    dragon: { strong: ["dragon"], weak: ["steel"], immune: ["fairy"] },
+    dark: { strong: ["psychic", "ghost"], weak: ["fighting", "dark", "fairy"] },
+    steel: { strong: ["ice", "rock", "fairy"], weak: ["fire", "water", "electric", "steel"] },
+    fairy: { strong: ["fighting", "dragon", "dark"], weak: ["fire", "poison", "steel"] }
 };
 
 const attackTypes = Object.keys(typeChart);
@@ -690,13 +705,9 @@ const multiplierLabels = {
     4: "4×"
 };
 
-// Generate the team weakness table.
+// Generate the team weakness table with highlighted coverage gaps.
 function buildTypeAnalysis(members, generation) {
     const container = document.createElement("div");
-
-    const summary = document.createElement("p");
-    summary.className = "analysis-summary";
-
     const wrapper = document.createElement("div");
     wrapper.className = "analysis-table-scroll";
 
@@ -710,7 +721,6 @@ function buildTypeAnalysis(members, generation) {
     attackHeading.textContent = "Attack Type";
     headRow.appendChild(attackHeading);
 
-    // Create a column for every selected Pokémon.
     members.forEach(({ name, types }) => {
         const th = document.createElement("th");
         th.className = "analysis-mon-heading";
@@ -726,53 +736,55 @@ function buildTypeAnalysis(members, generation) {
         headRow.appendChild(th);
     });
 
-    const countHeading = document.createElement("th");
-    countHeading.textContent = "Weak";
-    countHeading.title = "Number of Pokémon taking 2× or 4× damage";
-    headRow.appendChild(countHeading);
+    const defenseHeading = document.createElement("th");
+    defenseHeading.textContent = "Team Defense";
+    headRow.appendChild(defenseHeading);
 
     head.appendChild(headRow);
     table.appendChild(head);
 
-    const body = document.createElement("tbody");
-
-    // Only include types that existed in the selected generation.
+    // Only include types available in the selected generation.
     const possibleTypes = attackTypes.filter(type => {
         if (generation === 1) {
             return !["dark", "steel", "fairy"].includes(type);
         }
 
-        if (generation < 6) {
-            return type !== "fairy";
-        }
-
-        return true;
+        return generation >= 6 || type !== "fairy";
     });
 
-    const sharedWeaknesses = [];
+    // Calculate defensive coverage for each attacking type.
+    const rows = possibleTypes.map(type => {
+        const multipliers = members.map(({ types }) =>
+            incomingMultiplier(type, types, generation)
+        );
 
-    // Create a row for each incoming attack type.
-    possibleTypes.forEach(attackType => {
+        return {
+            type,
+            multipliers,
+            resistantCount: multipliers.filter(value => value < 1).length,
+            weakCount: multipliers.filter(value => value > 1).length
+        };
+    });
+
+    // Put uncovered types first.
+    // Show types with the most weak Pokémon at the top.
+    rows.sort((a, b) =>
+        Number(a.resistantCount > 0) -
+        Number(b.resistantCount > 0) ||
+        b.weakCount - a.weakCount
+    );
+
+    const body = document.createElement("tbody");
+
+    rows.forEach(({ type, multipliers, resistantCount, weakCount }) => {
         const tr = document.createElement("tr");
 
         const typeHeader = document.createElement("th");
-        typeHeader.appendChild(typeBadge(attackType));
+        typeHeader.appendChild(typeBadge(type));
         tr.appendChild(typeHeader);
 
-        let weakCount = 0;
-
-        // Calculate the multiplier for every team member.
-        members.forEach(({ name, types }) => {
-            const multiplier = incomingMultiplier(
-                attackType,
-                types,
-                generation
-            );
-
-            if (multiplier > 1) {
-                weakCount++;
-            }
-
+        // Display each Pokémon's damage multiplier.
+        multipliers.forEach(multiplier => {
             const td = document.createElement("td");
 
             td.textContent =
@@ -780,12 +792,10 @@ function buildTypeAnalysis(members, generation) {
 
             if (multiplier === 0) {
                 td.className = "analysis-immune";
+            } else if (multiplier === 4) {
+                td.className = "analysis-weak analysis-quad";
             } else if (multiplier > 1) {
                 td.className = "analysis-weak";
-
-                if (multiplier === 4) {
-                    td.classList.add("analysis-quad");
-                }
             } else if (multiplier < 1) {
                 td.className = "analysis-resistant";
             } else {
@@ -795,41 +805,52 @@ function buildTypeAnalysis(members, generation) {
             tr.appendChild(td);
         });
 
-        // Show how many Pokémon are weak to this type.
-        const countCell = document.createElement("td");
-        countCell.textContent = weakCount;
+        const defenseCell = document.createElement("td");
 
-        if (weakCount >= 2) {
-            countCell.className = "analysis-count-high";
+        // Highlight attacking types nobody on the team resists.
+        if (resistantCount === 0) {
+            tr.classList.add("analysis-uncovered");
+            defenseCell.className = "analysis-coverage-gap";
 
-            sharedWeaknesses.push({
-                type: attackType,
-                count: weakCount
-            });
+            if (weakCount > 0) {
+                tr.classList.add("analysis-exposed");
+                defenseCell.textContent =
+                    `No resistance (${weakCount} weak)`;
+            } else {
+                defenseCell.textContent = "No resistance";
+            }
+
+            // Find types that would provide a resistance or immunity.
+            const counters = possibleTypes.filter(defendingType =>
+                matchupFactor(type, defendingType, generation) < 1
+            );
+
+            const hint = document.createElement("small");
+            hint.className = "analysis-type-suggestion";
+
+            hint.textContent = counters.length
+                ? `Consider: ${counters.slice(0, 4).join(", ")}`
+                : "No single type resists this attack";
+
+            defenseCell.appendChild(hint);
+        } else {
+            defenseCell.className = "analysis-coverage-ok";
+            defenseCell.textContent =
+                `${resistantCount} resist / immune`;
         }
 
-        tr.appendChild(countCell);
+        tr.appendChild(defenseCell);
         body.appendChild(tr);
     });
 
-    // Sort shared weaknesses by how many Pokémon they threaten.
-    sharedWeaknesses.sort((a, b) => b.count - a.count);
-
-    if (sharedWeaknesses.length > 0) {
-        summary.textContent = "Shared weaknesses: " +
-            sharedWeaknesses
-                .map(item => `${item.type} (${item.count})`)
-                .join(", ");
-    } else {
-        summary.textContent = "No shared weaknesses detected.";
-    }
-
     table.appendChild(body);
     wrapper.appendChild(table);
-    container.append(summary, wrapper);
+    container.appendChild(wrapper);
 
+    // Keep the multiplier legend.
     const legend = document.createElement("p");
     legend.className = "analysis-legend";
+
     legend.textContent =
         "0× Immune · ¼× / ½× Resistant · 1× Neutral · " +
         "2× Weak · 4× Very Weak";
@@ -841,82 +862,63 @@ function buildTypeAnalysis(members, generation) {
 
 
 
-// ================== Calculate Button ==================
-
-
+// ================== Automatic Type Analysis ==================
 
 let analysisRun = 0;
 
 const analysisSection = document.getElementById("type-analysis");
-const analysisStatus = document.getElementById("analysis-status");
 const analysisOutput = document.getElementById("analysis-output");
 
-calculateButton.addEventListener("click", async () => {
+async function updateTypeAnalysis() {
     const run = ++analysisRun;
 
     const currentTeam = selectedPokemon.slice();
     const currentGeneration = generationNumber(gen);
     const selections = currentTeam.filter(Boolean);
 
-    analysisSection.hidden = false;
-    analysisOutput.replaceChildren();
-
+    // Hide the analysis when the team is empty.
     if (selections.length === 0) {
-        analysisStatus.textContent =
-            "Choose at least one Pokémon before calculating.";
+        analysisSection.hidden = true;
+        analysisOutput.replaceChildren();
         return;
     }
 
-    analysisStatus.textContent = "Checking Pokémon types...";
-    calculateButton.disabled = true;
+    analysisSection.hidden = false;
+
+    if (!analysisOutput.querySelector("table")) {
+        analysisOutput.textContent = "Loading type matchups...";
+    }
 
     try {
-        // Fetch all selected Pokémon's typing information.
         const details = await Promise.all(
             selections.map(getAnalysisPokemonDetails)
         );
 
-        if (run !== analysisRun) return;
-
-        // Detect whether the user changed the team during the request.
-        if (
-            currentGeneration !== generationNumber(gen) ||
-            currentTeam.some(
-                (pokemon, index) => pokemon !== selectedPokemon[index]
-            )
-        ) {
-            analysisStatus.textContent =
-                "Your team changed. Press Calculate again.";
+        // Ignore outdated results if the team changed again.
+        if (run !== analysisRun) {
             return;
         }
 
-        // Create the data needed by the table.
         const members = selections.map((pokemon, index) => ({
             name: pokemon.name,
             types: typesInGeneration(details[index], currentGeneration)
         }));
 
-        // Display the completed table.
-        analysisOutput.appendChild(
+        analysisOutput.replaceChildren(
             buildTypeAnalysis(members, currentGeneration)
         );
 
-        analysisStatus.textContent =
-            `Showing weaknesses for ${members.length} Pokémon.`;
-
     } catch (error) {
-        if (run === analysisRun) {
-            analysisStatus.textContent =
-                "Could not load Pokémon types. Please try again.";
+        if (run !== analysisRun) {
+            return;
+        }
 
-            console.error("Type analysis failed:", error);
-        }
-    } finally {
-        if (run === analysisRun) {
-            calculateButton.disabled = false;
-        }
+        console.error("Type analysis failed:", error);
+
+        analysisOutput.textContent =
+            "Could not load Pokémon types. Please try again.";
     }
-});
+}
 
 
 // Application Initialization

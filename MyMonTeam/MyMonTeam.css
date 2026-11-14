@@ -402,6 +402,7 @@ input[type="search"]:focus {
 
 .analysis-panel h2 {
     margin: 0 0 8px;
+    margin-bottom: 16px;
 }
 
 .analysis-description,
@@ -507,6 +508,43 @@ input[type="search"]:focus {
     cursor: progress;
 }
 
+/* Highlight types the team has no resistance to */
+
+.analysis-uncovered > th:first-child {
+    box-shadow: inset 4px 0 0 #e9b96e;
+}
+
+.analysis-coverage-gap {
+    background: rgba(233, 185, 110, 0.12);
+    color: #ffd39b;
+    font-weight: 700;
+    min-width: 230px;
+}
+
+.analysis-exposed > th:first-child {
+    box-shadow: inset 4px 0 0 #e07878;
+}
+
+.analysis-exposed .analysis-coverage-gap {
+    background: rgba(218, 67, 77, 0.2);
+    color: #ffd8d8;
+}
+
+.analysis-type-suggestion {
+    display: block;
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 400;
+    text-transform: capitalize;
+    white-space: normal;
+}
+
+.analysis-coverage-ok {
+    color: #c2f5d2;
+    font-weight: 600;
+    min-width: 180px;
+}
 
 
 /* 
