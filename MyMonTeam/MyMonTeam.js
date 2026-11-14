@@ -1,5 +1,8 @@
 /*
 - fix arrowkey overriding mouseenter
+- weaknesses of pokemon on the team
+- super effectiveness of moves your team has
+- 
 */
 
 
@@ -14,6 +17,7 @@ const team = document.getElementById("team");
 const searchInput = document.getElementById("pokemon-search");
 const searchResults = document.getElementById("search-results");
 const gameSelect = document.getElementById("game-select");
+const calculateButton = document.getElementById("calcButton");
 
 // Variables for the game and generation selection
 let game;
@@ -252,6 +256,16 @@ gameSelect.addEventListener("change", () => {
     initializeGameAndGen();
 });
 
+calculateButton.addEventListener("click", () => 
+{
+    selectedMoves.forEach((pokemonMoves) => {
+        pokemonMoves.forEach((move) => {
+            if (move !== null) {
+                console.log(move);
+            }
+        });
+    });
+});
 
 
 // =================== Main Search Functions ============================
