@@ -1,13 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MyMonTeam</title>
     <link rel="stylesheet" href="MyMonTeam.css">
 </head>
-
 <body>
     <div class="page">
         <header>
@@ -18,25 +16,27 @@
                     <p class="subtitle">Build a six-Pokémon squad and calculate the matchup.</p>
                 </div>
             </div>
+
             <div class="game-select">
-                <label for="game">Game</label>
+                <label for="game-select">Game</label>
                 <select id="game-select" name="game-select">
-                    <option value="generation-i" selected>Red / Blue</option>
-                    <option value="generation-i">Yellow</option>
-                    <option value="generation-ii">Gold / Silver</option>
-                    <option value="generation-ii">Crystal</option>
-                    <option value="generation-iii">Ruby / Sapphire</option>
-                    <option value="generation-iii">Emerald</option>
-                    <option value="generation-iii">FireRed / LeafGreen</option>
-                    <option value="generation-iv">Diamond / Pearl</option>
-                    <option value="generation-iv">Platinum</option>
-                    <option value="generation-iv">HeartGold / SoulSilver</option>
-                    <option value="generation-v">Black / White</option>
-                    <option value="generation-v">Black 2 / White 2</option>
-                    <option value="generation-vi">X / Y</option>
-                    <option value="generation-vi">Omega Ruby / Alpha Sapphire</option>
-                    <option value="generation-vii">Sun / Moon</option>
-                    <option value="generation-vii">Ultra Sun / Ultra Moon</option>
+                    <!-- data-sprite names are PokéAPI sprite-version keys. -->
+                    <option value="generation-i" data-sprite="red-blue" selected>Red / Blue</option>
+                    <option value="generation-i" data-sprite="yellow">Yellow</option>
+                    <option value="generation-ii" data-sprite="gold">Gold / Silver</option>
+                    <option value="generation-ii" data-sprite="crystal">Crystal</option>
+                    <option value="generation-iii" data-sprite="ruby-sapphire">Ruby / Sapphire</option>
+                    <option value="generation-iii" data-sprite="emerald">Emerald</option>
+                    <option value="generation-iii" data-sprite="firered-leafgreen">FireRed / LeafGreen</option>
+                    <option value="generation-iv" data-sprite="diamond-pearl">Diamond / Pearl</option>
+                    <option value="generation-iv" data-sprite="platinum">Platinum</option>
+                    <option value="generation-iv" data-sprite="heartgold-soulsilver">HeartGold / SoulSilver</option>
+                    <option value="generation-v" data-sprite="black-white">Black / White</option>
+                    <option value="generation-v" data-sprite="black-white">Black 2 / White 2</option>
+                    <option value="generation-vi" data-sprite="x-y">X / Y</option>
+                    <option value="generation-vi" data-sprite="omegaruby-alphasapphire">Omega Ruby / Alpha Sapphire</option>
+                    <option value="generation-vii" data-sprite="ultra-sun-ultra-moon">Sun / Moon</option>
+                    <option value="generation-vii" data-sprite="ultra-sun-ultra-moon">Ultra Sun / Ultra Moon</option>
                     <option value="generation-vii">Let's Go Pikachu / Let's Go Eevee</option>
                     <option value="generation-viii">Sword / Shield</option>
                     <option value="generation-viii">Brilliant Diamond / Shining Pearl</option>
@@ -48,21 +48,36 @@
         <section class="search">
             <label for="pokemon-search">Search Pokémon</label>
             <input id="pokemon-search" type="search" name="pokemon-search" placeholder="Search Pokémon"
-                autocomplete="off" autocorrect="off" spellcheck="false">
+                   autocomplete="off" autocorrect="off" spellcheck="false">
             <div id="search-results"></div>
         </section>
 
-        <main class="team-grid" id="team">
+        <!-- The six team slots are created by JavaScript. -->
+        <main class="team-grid" id="team"></main>
 
-        </main>
+        <section class="analysis-panel" id="type-analysis">
+            <div class="analysis-tabs" role="tablist" aria-label="Team Analysis">
+                <button id="weakness-tab" class="analysis-tab active" type="button" role="tab"
+                        aria-selected="true" aria-controls="weakness-panel">
+                    Team Type Weaknesses
+                </button>
+                <button id="coverage-tab" class="analysis-tab" type="button" role="tab"
+                        aria-selected="false" aria-controls="coverage-panel" tabindex="-1">
+                    Move Type Coverage
+                </button>
+            </div>
 
-        <section class="analysis-panel" id="type-analysis" hidden>
-            <h2>Team Type Weaknesses</h2>
-            <div id="analysis-output"></div>
+            <div class="analysis-tab-content">
+                <div id="weakness-panel" role="tabpanel" aria-labelledby="weakness-tab">
+                    <div id="analysis-output"></div>
+                </div>
+                <div id="coverage-panel" role="tabpanel" aria-labelledby="coverage-tab" hidden>
+                    <p>Move type coverage will appear here.</p>
+                </div>
+            </div>
         </section>
     </div>
 
     <script src="MyMonTeam.js"></script>
 </body>
-
 </html>

@@ -1,50 +1,18 @@
-/*
-- fix arrowkey overriding mouseenter
-- weaknesses of pokemon on the team
-- super effectiveness of moves your team has
-- 
-*/
+"use strict";
 
-
-
-// =============== Element and Variable creation ===========================
-
-
-
-// Initializing HTML elements and JS variables
-// Get the main HTML elements
+// ==================== Elements and application state ====================
 const team = document.getElementById("team");
 const searchInput = document.getElementById("pokemon-search");
 const searchResults = document.getElementById("search-results");
 const gameSelect = document.getElementById("game-select");
+const analysisSection = document.getElementById("type-analysis");
+const analysisOutput = document.getElementById("analysis-output");
+const analysisTabs = document.querySelectorAll(".analysis-tab");
 
-// Variables for the game and generation selection
-let game;
-let gen;
+const TEAM_SIZE = 6;
+const MOVES_PER_POKEMON = 4;
+const POKEAPI = "https://pokeapi.co/api/v2";
 
-// Array used for storing Pokémon; initially empty
-let allPokemon = [];
-
-// Array used for storing Moves; initially empty
-let allMoves = [];
-
-// A null array to set the selected moves to null
-const selectedMoves = Array.from(
-    { length: 6 },
-    () => Array(4).fill(null)
-);
-
-// Track the currently highlighted search result
-let highlightedIndex = 0;
-
-// Track the Pokémon occupying each of the six team slots
-// A value of null represents an empty slot
-const selectedPokemon = Array(6).fill(null);
-
-// An array for the HTMl elements for each team slot
-const teamSlots = [];
-
-// Used for finding the number of pokemon available in the generation
 const generationRanges = {
     "generation-i": 151,
     "generation-ii": 251,
@@ -57,497 +25,281 @@ const generationRanges = {
     "generation-ix": 1025
 };
 
+const selectedPokemon = Array(TEAM_SIZE).fill(null);
+const selectedMoves = Array.from(
+    { length: TEAM_SIZE },
+    () => Array(MOVES_PER_POKEMON).fill(null)
+);
+const teamSlots = [];
+const pendingSlots = new Map();
+const pokemonDetailsCache = new Map();
 
+let allPokemon = [];
+let allMoves = [];
+let visiblePokemonMatches = [];
+let highlightedIndex = 0;
+let gameVersion = 0;
+let analysisRun = 0;
+let gen = gameSelect.value;
+let spriteGame = gameSelect.selectedOptions[0].dataset.sprite ?? "";
 
-// ==================== Loading API Information ===========================
+function createElement(tag, className = "", text = null) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== null) element.textContent = text;
+    return element;
+}
 
+function formatName(name) {
+    return name.replaceAll("-", " ").replace(/\b\w/g, letter => letter.toUpperCase());
+}
 
+// ==================== API loading and caching ====================
+async function fetchJson(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Request failed: ${response.status} (${url})`);
+    return response.json();
+}
 
-// Pokémon Data Loading
-// Fetch the list of Pokémon names and API URLs from PokéAPI.
 async function loadPokemon() {
     try {
-        const response = await fetch(
-            "https://pokeapi.co/api/v2/pokemon?limit=1025"
-        );
-
-        // Handle unsuccessful HTTP responses.
-        if (!response.ok) {
-            throw new Error("Failed to fetch Pokémon");
-        }
-
-        // Save the returned Pokémon list for searching.
-        const data = await response.json();
+        const data = await fetchJson(`${POKEAPI}/pokemon?limit=1025`);
         allPokemon = data.results;
+        if (searchInput.value) updateSearch();
     } catch (error) {
-        // Log loading errors and clear any search results.
-        console.error("Error loading Pokémon:", error);
-        searchResults.replaceChildren();
+        console.error("Could not load Pokémon:", error);
     }
 }
 
-// Move data loading
-// Fetch the list of Pokémon moves and API URLs from PokéAPI.
 async function loadMoves() {
     try {
-        const response = await fetch(
-            "https://pokeapi.co/api/v2/move?limit=1000"
-        );
-
-        if (!response.ok) {
-            throw new Error("Failed to fetch moves");
-        }
-
-        const data = await response.json();
+        const data = await fetchJson(`${POKEAPI}/move?limit=1000`);
         allMoves = data.results;
     } catch (error) {
-        console.error("Error loading moves:", error);
+        console.error("Could not load moves:", error);
     }
 }
 
-
-
-// ================= Main Initializing Features ==========================
-
-
-
-// Team Slot Initialization
-// Creating six empty team slots and saving their references.
-for (let slot = 1; slot <= 6; slot += 1) {
-    const card = document.createElement("article");
-
-    card.className = "mon-card";
-    card.setAttribute("aria-label", `Slot ${slot}`);
-
-    team.appendChild(card);
-    teamSlots.push(card);
+// Caches the request itself, so simultaneous callers share one fetch.
+function getPokemonDetails(pokemon) {
+    if (!pokemonDetailsCache.has(pokemon.url)) {
+        const request = fetchJson(pokemon.url).catch(error => {
+            pokemonDetailsCache.delete(pokemon.url);
+            throw error;
+        });
+        pokemonDetailsCache.set(pokemon.url, request);
+    }
+    return pokemonDetailsCache.get(pokemon.url);
 }
 
-// Call the function to initialize the game and generation
-initializeGameAndGen();
+// ==================== Game and Pokémon search ====================
+function updateSelectedGame() {
+    gen = gameSelect.value;
+    spriteGame = gameSelect.selectedOptions[0].dataset.sprite ?? "";
+}
 
+function pokemonId(pokemon) {
+    return Number(pokemon.url.match(/\/(\d+)\/?$/)?.[1] ?? Infinity);
+}
 
+function setHighlightedIndex(index) {
+    if (!visiblePokemonMatches.length) return;
 
-// =================== Event Listeners ============================
-
-
-
-// Search Input Handling
-// Filter Pokémon names as the user types
-searchInput.addEventListener("input", () => {
-    updateSearch();
-});
-
-// Keyboard Input Handling
-// Allow Enter to select the currently highlighted Pokémon
-searchInput.addEventListener("keydown", (event) => {
-
-    // Move the highlighted Pokémon with up and down arrow keys
-    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-        event.preventDefault();
-
-        // Do nothing if there is nothing to select
-        if (searchResults.children.length === 0) {
-            return;
-        }
-
-        // Getting the direction to move the highlight
-        const direction = event.key === "ArrowUp" ? -1 : 1;
-        highlightedIndex += direction;
-
-        // Maintaining the bounds of the highlighted Pokémon
-        if (highlightedIndex < 0) {
-            highlightedIndex = 0;
-        }
-        else if (highlightedIndex >= searchResults.children.length) {
-            highlightedIndex = searchResults.children.length - 1;
-        }
-
-        // Highlight the Pokémon based on the current index + direction
-        searchResults
-            .querySelectorAll(".pokemon-result")
-            .forEach((item, index) => {
-                item.classList.remove("highlighted");
-                if (index === highlightedIndex) {
-                    item.classList.add("highlighted");
-                }
-            });
-
-        return;
-    }
-
-    // Ignore keys other than Enter
-    if (event.key !== "Enter") {
-        return;
-    }
-
-    // Prevent the default Enter key behavior.
-    event.preventDefault();
-
-    // Get the highlighted result, excluding the no-results message.
-    const highlightedResult = searchResults.querySelectorAll(
-        ".pokemon-result:not([style*='cursor: default'])"
-    )[highlightedIndex];
-
-    // Do nothing if there is no selectable result.
-    if (!highlightedResult) {
-        return;
-    }
-
-    // Find the Pokémon represented by the highlighted result.
-    const query = searchInput.value.trim().toLowerCase();
-
-    const matches = allPokemon.filter(
-        (pokemon) => pokemon.name.includes(query)
-    );
-
-    const selected = matches.find(
-        (pokemon) => (pokemon.name[0].toUpperCase() + pokemon.name.slice(1, pokemon.name.length))
-            === highlightedResult.textContent
-    );
-
-    // Add the Pokémon if a matching result was found.
-    if (selected) {
-        selectPokemon(selected);
-    }
-});
-
-// When user clicks out of the search bar, remove the result selection
-searchInput.addEventListener("blur", () => {
-    searchResults.replaceChildren();
-});
-
-// When user clicks onto the search bar, call the updateSearch function
-searchInput.addEventListener("focus", () => {
-    updateSearch();
-});
-
-// When user clicks on a selection, prevent the blur event listener
-searchResults.addEventListener("mousedown", (event) => {
-    if (event.target.closest(".pokemon-result")) {
-        event.preventDefault();
-    }
-});
-
-// When the user selects a different game, reset everything and reinitialize the game and gen
-gameSelect.addEventListener("change", () => {
-    // Clear the selected Pokémon and moves
-    selectedPokemon.fill(null);
-
-    selectedMoves.forEach((moves, index) => {
-        selectedMoves[index] = Array(4).fill(null);
+    highlightedIndex = Math.max(0, Math.min(index, visiblePokemonMatches.length - 1));
+    searchResults.querySelectorAll("[data-pokemon-index]").forEach((result, i) => {
+        result.classList.toggle("highlighted", i === highlightedIndex);
     });
+}
 
-    // Clear all six Pokémon cards
-    teamSlots.forEach((card, index) => {
-        card.replaceChildren();
-        card.setAttribute("aria-label", `Slot ${index + 1}`);
-    });
-
-    // Clear the search bar and its results
-    searchInput.value = "";
+function displayPokemonResults(matches) {
+    visiblePokemonMatches = matches;
+    highlightedIndex = 0;
     searchResults.replaceChildren();
 
-    // Reset search navigation
-    highlightedIndex = 0;
-
-    // Call the function to set game and gen variables
-    initializeGameAndGen();
-    updateTypeAnalysis();
-});
-
-
-
-// =================== Main Search Functions ============================
-
-
-
-// Search Results Display
-// Display Pokémon that match the user input and highlight the first result.
-function displaySearchResults(matches) {
-    searchResults.replaceChildren();
-    highlightedIndex = 0;
-
-    // Display a message when no Pokémon match the search.
-    if (matches.length === 0) {
-        const message = document.createElement("div");
-
-        message.textContent = "No Pokémon found.";
-        message.className = "pokemon-result";
-        message.style.cursor = "default";
-
-        searchResults.appendChild(message);
+    if (!matches.length) {
+        searchResults.appendChild(createElement("div", "pokemon-result is-empty", "No Pokémon found."));
         return;
     }
 
-    // Create one clickable result for each matching Pokémon.
     matches.forEach((pokemon, index) => {
-        const result = document.createElement("div");
-
-        result.textContent = pokemon.name[0].toUpperCase() +
-            pokemon.name.slice(1, pokemon.name.length);
-        result.className = "pokemon-result";
-
-        // Highlight the first result by default.
-        if (index === highlightedIndex) {
-            result.classList.add("highlighted");
-        }
-
-        // Update the highlighted result when the mouse enters it.
-        result.addEventListener("mouseenter", () => {
-            highlightedIndex = index;
-
-            // Remove the highlight from all search results.
-            searchResults
-                .querySelectorAll(".pokemon-result")
-                .forEach((item) => {
-                    item.classList.remove("highlighted");
-                });
-
-            // Highlight the result currently under the mouse.
-            result.classList.add("highlighted");
-        });
-
-        // Add the Pokémon when its search result is clicked.
-        result.addEventListener("click", () => {
-            selectPokemon(pokemon);
-        });
-
+        const result = createElement("div", "pokemon-result", formatName(pokemon.name));
+        result.dataset.pokemonIndex = String(index);
+        result.classList.toggle("highlighted", index === 0);
         searchResults.appendChild(result);
     });
 }
 
-// A function that is called when the search bar becomes focused or detects input
 function updateSearch() {
     const query = searchInput.value.trim().toLowerCase();
-
-    // Hide the dropdown when the search input is empty.
-    if (query === "") {
+    if (!query) {
+        visiblePokemonMatches = [];
         searchResults.replaceChildren();
         return;
     }
 
-    // Get the max number of Pokémon in this gen
-    const maxDex = generationRanges[gen];
-
-    // Find matching Pokémon and display at most six results.
+    const maxId = generationRanges[gen];
     const matches = allPokemon
-        .filter((pokemon) => {
-            const id = Number(pokemon.url.split("/").filter(Boolean).pop());
-            return pokemon.name.includes(query) && id <= maxDex;
-        }).slice(0, 6);
+        .filter(pokemon => pokemon.name.includes(query) && pokemonId(pokemon) <= maxId)
+        .slice(0, 6);
 
-    displaySearchResults(matches);
+    displayPokemonResults(matches);
 }
 
+function clearSearch() {
+    searchInput.value = "";
+    searchResults.replaceChildren();
+    visiblePokemonMatches = [];
+    highlightedIndex = 0;
+}
 
-
-// =================== Pokémon Team Slot Functions ============================
-
-
-
-// Pokémon Selection and Team Updates
-// Add a selected Pokémon to the next available team slot.
-async function selectPokemon(pokemon) {
-    if (!pokemon) {
-        return;
-    }
-
-    // Find the first empty slot, starting from the left.
-    const slotIndex = selectedPokemon.findIndex(
-        (slot) => slot === null
+// ==================== Team cards and move selection ====================
+function selectedSprite(details) {
+    return (
+        (spriteGame && details.sprites.versions?.[gen]?.[spriteGame]?.front_default) ||
+        details.sprites.other?.["official-artwork"]?.front_default ||
+        details.sprites.front_default
     );
-
-    // Stop if all six team slots are occupied.
-    if (slotIndex === -1) {
-        console.log("Your team is full!");
-        return;
-    }
-
-    try {
-        // Fetch the selected Pokémon's detailed information.
-        const response = await fetch(pokemon.url);
-
-        if (!response.ok) {
-            throw new Error("Failed to fetch Pokémon details");
-        }
-
-        const data = await response.json();
-        analysisDetailCache.set(pokemon.url, Promise.resolve(data));
-
-        // Set the sprite based on the generation and game
-        // If one is not found, use the default sprite
-        const sprite = data.sprites.versions?.[gen]?.[game]?.front_default
-            || data.sprites.front_default;
-
-        // Stop if no usable sprite is available.
-        if (!sprite) {
-            throw new Error("No sprite available for this Pokémon");
-        }
-
-        // Record the Pokémon in the selected team slot.
-        selectedPokemon[slotIndex] = pokemon;
-
-        // Create an image element for the Pokémon's sprite.
-        const image = document.createElement("img");
-
-        image.src = sprite;
-        image.alt = pokemon.name;
-        image.className = "pokemon-sprite";
-
-        // Create a label displaying the Pokémon's name.
-        const name = document.createElement("p");
-
-        name.textContent = pokemon.name;
-        name.className = "pokemon-name";
-
-        // Display the sprite and name in the corresponding team card.
-        const card = teamSlots[slotIndex];
-
-        // Create the moves container
-        const movesContainer = document.createElement("div");
-        movesContainer.className = "moves-container";
-
-        // Create four searchable move slots
-        for (let i = 1; i <= 4; i += 1) {
-            const moveSlot = document.createElement("div");
-            moveSlot.className = "move-slot";
-
-            const moveInput = document.createElement("input");
-            moveInput.type = "search";
-            moveInput.className = "move-search-input";
-            moveInput.placeholder = `Move ${i}`;
-            moveInput.autocomplete = "off";
-
-            const moveResults = document.createElement("div");
-            moveResults.className = "move-search-results";
-
-            moveSlot.append(moveInput, moveResults);
-            movesContainer.appendChild(moveSlot);
-
-            // Search for moves as the user types
-            moveInput.addEventListener("input", () => {
-                const query = moveInput.value.trim().toLowerCase();
-
-                // Clear the previously selected move when edited.
-                if (selectedMoves[slotIndex][i - 1] !== null) {
-                    selectedMoves[slotIndex][i - 1] = null;
-                    updateTypeAnalysis();
-                }
-
-                if (query === "") {
-                    moveResults.replaceChildren();
-                    return;
-                }
-
-                const matches = allMoves
-                    .filter((move) => move.name.includes(query))
-                    .slice(0, 6);
-
-                displayMoveResults(
-                    matches,
-                    moveInput,
-                    moveResults,
-                    slotIndex,
-                    i - 1
-                );
-            });
-        }
-
-        // Create the remove button.
-        const removeButton = document.createElement("button");
-        removeButton.className = "remove-pokemon";
-        removeButton.textContent = "×";
-        removeButton.type = "button";
-        removeButton.setAttribute("aria-label", `Remove ${pokemon.name}`);
-
-        // Remove the Pokémon when the button is clicked.
-        removeButton.addEventListener("click", () => {
-            selectedPokemon[slotIndex] = null;
-            card.replaceChildren();
-            card.setAttribute("aria-label", `Slot ${slotIndex + 1}`);
-            selectedMoves[slotIndex] = Array(4).fill(null);
-
-            updateTypeAnalysis();
-        });
-
-        card.replaceChildren(image, name, movesContainer, removeButton);
-        card.setAttribute(
-            "aria-label",
-            `Slot ${slotIndex + 1}: ${pokemon.name}`
-        );
-
-        // Clear the search input and close the results dropdown.
-        searchInput.value = "";
-        searchResults.replaceChildren();
-        highlightedIndex = 0;
-
-        updateTypeAnalysis();
-        console.log(`Added ${pokemon.name} to slot ${slotIndex + 1}.`);
-    } catch (error) {
-        // Report errors without crashing the application.
-        console.error("Couldn't add Pokémon:", error);
-    }
 }
 
-// A function used to display the search for moves
-function displayMoveResults(matches, input, results, pokemonIndex, moveIndex) {
+function showMoveResults(matches, input, results, slotIndex, moveIndex) {
     results.replaceChildren();
 
-    if (matches.length === 0) {
-        const message = document.createElement("div");
-        message.className = "move-result";
-        message.textContent = "No moves found.";
-        results.appendChild(message);
+    if (!matches.length) {
+        results.appendChild(createElement("div", "move-result", "No moves found."));
         return;
     }
 
-    matches.forEach((move) => {
-        const result = document.createElement("div");
-        result.className = "move-result";
+    matches.forEach(move => {
+        const result = createElement(
+            "div", "move-result", formatName(move.name.replace(/-(physical|special)$/i, ""))
+        );
 
-        result.textContent = move.name
-            .replace(/-(physical|special)$/i, "")
-            .replaceAll("-", " ")
-            .replace(/\b\w/g, (char) => char.toUpperCase());
-
-        result.addEventListener("mousedown", (event) => {
-            // Keep the selection working even when the input loses focus
-            event.preventDefault();
-
+        result.addEventListener("mousedown", event => {
+            event.preventDefault(); // Keep the input focused while selecting.
             input.value = result.textContent;
             results.replaceChildren();
-
-            selectedMoves[pokemonIndex][moveIndex] = move;
-            updateTypeAnalysis();
+            selectedMoves[slotIndex][moveIndex] = move;
+            updateTypeAnalysis(); // Move coverage will use these selections later.
         });
 
         results.appendChild(result);
     });
 }
 
+function createMoveInput(slotIndex, moveIndex) {
+    const slot = createElement("div", "move-slot");
+    const input = createElement("input", "move-search-input");
+    const results = createElement("div", "move-search-results");
 
+    input.type = "search";
+    input.placeholder = `Move ${moveIndex + 1}`;
+    input.autocomplete = "off";
 
-// =================== Variable Functions ============================
+    input.addEventListener("input", () => {
+        const query = input.value.trim().toLowerCase();
 
+        // Editing or clearing a field invalidates its former selection.
+        if (selectedMoves[slotIndex][moveIndex] !== null) {
+            selectedMoves[slotIndex][moveIndex] = null;
+            updateTypeAnalysis();
+        }
 
+        if (!query) {
+            results.replaceChildren();
+            return;
+        }
 
-// Set game and gen variables
-function initializeGameAndGen() {
-    // Format the selected game text to use in API calls
-    game = gameSelect.selectedOptions[0].text.trim().toLowerCase().replace(" / ", "-")
-        .replaceAll(" ", "-").replaceAll("'", "");
+        const matches = allMoves.filter(move => move.name.includes(query)).slice(0, 6);
+        showMoveResults(matches, input, results, slotIndex, moveIndex);
+    });
 
-    // Get the value of the selected game
-    gen = gameSelect.value;
+    input.addEventListener("blur", () => results.replaceChildren());
+    slot.append(input, results);
+    return slot;
 }
 
+function removePokemon(slotIndex) {
+    selectedPokemon[slotIndex] = null;
+    selectedMoves[slotIndex].fill(null);
+    teamSlots[slotIndex].replaceChildren();
+    teamSlots[slotIndex].setAttribute("aria-label", `Slot ${slotIndex + 1}`);
+    updateTypeAnalysis();
+}
 
+function renderPokemonCard(pokemon, slotIndex, sprite) {
+    const card = teamSlots[slotIndex];
+    const image = createElement("img", "pokemon-sprite");
+    const name = createElement("p", "pokemon-name", pokemon.name);
+    const moves = createElement("div", "moves-container");
+    const removeButton = createElement("button", "remove-pokemon", "×");
 
-// ================== Team Type Weakness Analysis ==================
+    image.src = sprite;
+    image.alt = pokemon.name;
+    removeButton.type = "button";
+    removeButton.setAttribute("aria-label", `Remove ${pokemon.name}`);
+    removeButton.addEventListener("click", () => removePokemon(slotIndex));
 
-// Offensive type chart:
-// strong = 2x damage, weak = 0.5x damage, immune = 0x damage
+    for (let i = 0; i < MOVES_PER_POKEMON; i++) {
+        moves.appendChild(createMoveInput(slotIndex, i));
+    }
+
+    card.replaceChildren(image, name, moves, removeButton);
+    card.setAttribute("aria-label", `Slot ${slotIndex + 1}: ${pokemon.name}`);
+}
+
+async function selectPokemon(pokemon) {
+    if (!pokemon) return;
+
+    // Reserve a slot while its details load, so rapid clicks cannot overwrite it.
+    const slotIndex = selectedPokemon.findIndex(
+        (value, index) => value === null && !pendingSlots.has(index)
+    );
+    if (slotIndex === -1) return;
+
+    const requestVersion = gameVersion;
+    const requestId = Symbol("pending Pokémon");
+    pendingSlots.set(slotIndex, requestId);
+
+    try {
+        const details = await getPokemonDetails(pokemon);
+        if (requestVersion !== gameVersion) return;
+
+        const sprite = selectedSprite(details);
+        if (!sprite) throw new Error(`No sprite available for ${pokemon.name}`);
+
+        selectedPokemon[slotIndex] = pokemon;
+        selectedMoves[slotIndex].fill(null);
+        renderPokemonCard(pokemon, slotIndex, sprite);
+        clearSearch();
+        updateTypeAnalysis();
+    } catch (error) {
+        if (requestVersion === gameVersion) {
+            console.error(`Could not add ${pokemon.name}:`, error);
+        }
+    } finally {
+        if (pendingSlots.get(slotIndex) === requestId) {
+            pendingSlots.delete(slotIndex);
+        }
+    }
+}
+
+function resetTeamForNewGame() {
+    gameVersion++; // Invalidate unfinished selections from the previous game.
+    pendingSlots.clear();
+    selectedPokemon.fill(null);
+    selectedMoves.forEach(moves => moves.fill(null));
+    teamSlots.forEach((card, index) => {
+        card.replaceChildren();
+        card.setAttribute("aria-label", `Slot ${index + 1}`);
+    });
+
+    clearSearch();
+    updateSelectedGame();
+    updateTypeAnalysis(); // Also invalidates unfinished analysis and hides the chart.
+}
+
+// ==================== Type matchup rules ====================
+// Offensive chart: strong = 2×, weak = ½×, immune = 0× against defending type.
 const typeChart = {
     normal: { strong: [], weak: ["rock", "steel"], immune: ["ghost"] },
     fire: { strong: ["grass", "ice", "bug", "steel"], weak: ["fire", "water", "rock", "dragon"] },
@@ -569,36 +321,36 @@ const typeChart = {
     fairy: { strong: ["fighting", "dragon", "dark"], weak: ["fire", "poison", "steel"] }
 };
 
-const attackTypes = Object.keys(typeChart);
-
 const typeColors = {
-    normal: "#a7a9aa", fire: "#f58f68",
-    water: "#78b3ff", electric: "#f7d66a",
-    grass: "#7ed09b", ice: "#9ee6e6",
-    fighting: "#e07878", poison: "#c58ee7",
-    ground: "#dcb67c", flying: "#adbdf5",
-    psychic: "#f39bc0", bug: "#b4c66d",
-    rock: "#ccb88c", ghost: "#a9a0e2",
-    dragon: "#9b89ec", dark: "#a49aab",
+    normal: "#a7a9aa", fire: "#f58f68", water: "#78b3ff", electric: "#f7d66a",
+    grass: "#7ed09b", ice: "#9ee6e6", fighting: "#e07878", poison: "#c58ee7",
+    ground: "#dcb67c", flying: "#adbdf5", psychic: "#f39bc0", bug: "#b4c66d",
+    rock: "#ccb88c", ghost: "#a9a0e2", dragon: "#9b89ec", dark: "#a49aab",
     steel: "#a5bbc8", fairy: "#efb5ea"
 };
 
-// Convert generation names like "generation-iv" into numbers.
-function generationNumber(generationName) {
-    const roman = generationName.replace("generation-", "");
-    const numbers = {
-        i: 1, ii: 2, iii: 3,
-        iv: 4, v: 5, vi: 6,
-        vii: 7, viii: 8, ix: 9
-    };
+const attackTypes = Object.keys(typeChart);
+const multiplierLabels = {
+    0: "0×", 0.25: "¼×", 0.5: "½×", 1: "1×", 2: "2×", 4: "4×"
+};
+const generationNumbers = {
+    i: 1, ii: 2, iii: 3, iv: 4, v: 5,
+    vi: 6, vii: 7, viii: 8, ix: 9
+};
 
-    return numbers[roman] ?? 9;
+function generationNumber(name) {
+    return generationNumbers[name.replace("generation-", "")] ?? 9;
 }
 
-// Calculate one attacking type against one defending type.
-function matchupFactor(attackType, defenseType, generation) {
+function availableTypes(generation) {
+    return attackTypes.filter(type =>
+        (generation > 1 || !["dark", "steel", "fairy"].includes(type)) &&
+        (generation >= 6 || type !== "fairy")
+    );
+}
 
-    // Special rules from Generation 1
+function matchupFactor(attackType, defenseType, generation) {
+    // Original Red/Blue/Yellow type-chart exceptions.
     if (generation === 1) {
         if (attackType === "bug" && defenseType === "poison") return 2;
         if (attackType === "poison" && defenseType === "bug") return 2;
@@ -606,158 +358,78 @@ function matchupFactor(attackType, defenseType, generation) {
         if (attackType === "ice" && defenseType === "fire") return 1;
     }
 
-    // Steel resisted Ghost and Dark before Generation 6.
-    if (
-        generation >= 2 && generation <= 5 &&
-        defenseType === "steel" &&
-        (attackType === "ghost" || attackType === "dark")
-    ) {
+    // Steel resisted Dark and Ghost until X/Y (Generation 6).
+    if (generation >= 2 && generation <= 5 && defenseType === "steel" &&
+        (attackType === "ghost" || attackType === "dark")) {
         return 0.5;
     }
 
     const entry = typeChart[attackType];
-
     if (!entry) return 1;
     if (entry.immune?.includes(defenseType)) return 0;
     if (entry.strong.includes(defenseType)) return 2;
     if (entry.weak.includes(defenseType)) return 0.5;
-
     return 1;
 }
 
-// Calculate damage against all of a Pokémon's types.
-// For example: Ice vs Dragon/Ground = 2 * 2 = 4x.
 function incomingMultiplier(attackType, defendingTypes, generation) {
     return defendingTypes.reduce(
-        (total, type) => total * matchupFactor(attackType, type, generation),
-        1
+        (total, type) => total * matchupFactor(attackType, type, generation), 1
     );
 }
 
-// Account for Pokémon that had different types in older games.
-function typesInGeneration(pokemonData, generation) {
-    const past = (pokemonData.past_types ?? [])
-        .filter(entry =>
-            generation <= generationNumber(entry.generation.name)
-        )
-        .sort((a, b) =>
-            generationNumber(a.generation.name) -
-            generationNumber(b.generation.name)
-        );
+function typesInGeneration(details, generation) {
+    const past = (details.past_types ?? [])
+        .filter(entry => generation <= generationNumber(entry.generation.name))
+        .sort((a, b) => generationNumber(a.generation.name) - generationNumber(b.generation.name));
 
-    const entries = past.length ? past[0].types : pokemonData.types;
-
-    return entries
-        .slice()
+    const entries = past.length ? past[0].types : details.types;
+    return [...entries]
         .sort((a, b) => a.slot - b.slot)
         .map(entry => entry.type.name);
 }
 
-// Cache Pokémon details so Calculate doesn't repeatedly fetch them.
-const analysisDetailCache = new Map();
-
-function getAnalysisPokemonDetails(pokemon) {
-
-    // Reuse the earlier speed optimization if installed.
-    if (typeof getPokemonDetails === "function") {
-        return getPokemonDetails(pokemon);
-    }
-
-    if (!analysisDetailCache.has(pokemon.url)) {
-        const request = fetch(pokemon.url)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`Could not load ${pokemon.name}`);
-                }
-                return response.json();
-            })
-            .catch(error => {
-                analysisDetailCache.delete(pokemon.url);
-                throw error;
-            });
-
-        analysisDetailCache.set(pokemon.url, request);
-    }
-
-    return analysisDetailCache.get(pokemon.url);
-}
-
-// Create a colored type label.
+// ==================== Defensive coverage table ====================
 function typeBadge(type) {
-    const badge = document.createElement("span");
-
-    badge.className = "analysis-type";
-    badge.textContent = type;
-    badge.style.setProperty(
-        "--type-color",
-        typeColors[type] ?? "#aaa"
-    );
-
+    const badge = createElement("span", "analysis-type", type);
+    badge.style.setProperty("--type-color", typeColors[type] ?? "#aaa");
     return badge;
 }
 
-const multiplierLabels = {
-    0: "0×",
-    0.25: "¼×",
-    0.5: "½×",
-    1: "1×",
-    2: "2×",
-    4: "4×"
-};
+function multiplierClass(multiplier) {
+    if (multiplier === 0) return "analysis-immune";
+    if (multiplier === 4) return "analysis-weak analysis-quad";
+    if (multiplier > 1) return "analysis-weak";
+    if (multiplier < 1) return "analysis-resistant";
+    return "analysis-neutral";
+}
 
-// Generate the team weakness table with highlighted coverage gaps.
 function buildTypeAnalysis(members, generation) {
-    const container = document.createElement("div");
-    const wrapper = document.createElement("div");
-    wrapper.className = "analysis-table-scroll";
+    const available = availableTypes(generation);
+    const container = createElement("div");
+    const wrapper = createElement("div", "analysis-table-scroll");
+    const table = createElement("table", "analysis-table");
+    const headerRow = createElement("tr");
 
-    const table = document.createElement("table");
-    table.className = "analysis-table";
-
-    const head = document.createElement("thead");
-    const headRow = document.createElement("tr");
-
-    const attackHeading = document.createElement("th");
-    attackHeading.textContent = "Attack Type";
-    headRow.appendChild(attackHeading);
-
+    headerRow.appendChild(createElement("th", "", "Attack Type"));
     members.forEach(({ name, types }) => {
-        const th = document.createElement("th");
-        th.className = "analysis-mon-heading";
-
-        const monName = document.createElement("span");
-        monName.className = "analysis-mon-name";
-        monName.textContent = name.replaceAll("-", " ");
-
-        const typeLabel = document.createElement("small");
-        typeLabel.textContent = types.join(" / ");
-
-        th.append(monName, typeLabel);
-        headRow.appendChild(th);
+        const heading = createElement("th", "analysis-mon-heading");
+        heading.append(
+            createElement("span", "analysis-mon-name", formatName(name)),
+            createElement("small", "", types.join(" / "))
+        );
+        headerRow.appendChild(heading);
     });
+    headerRow.appendChild(createElement("th", "", "Team Defense"));
 
-    const defenseHeading = document.createElement("th");
-    defenseHeading.textContent = "Team Defense";
-    headRow.appendChild(defenseHeading);
-
-    head.appendChild(headRow);
+    const head = createElement("thead");
+    head.appendChild(headerRow);
     table.appendChild(head);
 
-    // Only include types available in the selected generation.
-    const possibleTypes = attackTypes.filter(type => {
-        if (generation === 1) {
-            return !["dark", "steel", "fairy"].includes(type);
-        }
-
-        return generation >= 6 || type !== "fairy";
-    });
-
-    // Calculate defensive coverage for each attacking type.
-    const rows = possibleTypes.map(type => {
-        const multipliers = members.map(({ types }) =>
-            incomingMultiplier(type, types, generation)
+    const rows = available.map(type => {
+        const multipliers = members.map(member =>
+            incomingMultiplier(type, member.types, generation)
         );
-
         return {
             type,
             multipliers,
@@ -766,162 +438,161 @@ function buildTypeAnalysis(members, generation) {
         };
     });
 
-    // Put uncovered types first.
-    // Show types with the most weak Pokémon at the top.
+    // Uncovered threats first, with the most exposed Pokémon at the top.
     rows.sort((a, b) =>
-        Number(a.resistantCount > 0) -
-        Number(b.resistantCount > 0) ||
+        Number(a.resistantCount > 0) - Number(b.resistantCount > 0) ||
         b.weakCount - a.weakCount
     );
 
-    const body = document.createElement("tbody");
-
+    const body = createElement("tbody");
     rows.forEach(({ type, multipliers, resistantCount, weakCount }) => {
-        const tr = document.createElement("tr");
+        const row = createElement("tr");
+        const attack = createElement("th");
+        attack.appendChild(typeBadge(type));
+        row.appendChild(attack);
 
-        const typeHeader = document.createElement("th");
-        typeHeader.appendChild(typeBadge(type));
-        tr.appendChild(typeHeader);
-
-        // Display each Pokémon's damage multiplier.
         multipliers.forEach(multiplier => {
-            const td = document.createElement("td");
-
-            td.textContent =
-                multiplierLabels[multiplier] ?? `${multiplier}×`;
-
-            if (multiplier === 0) {
-                td.className = "analysis-immune";
-            } else if (multiplier === 4) {
-                td.className = "analysis-weak analysis-quad";
-            } else if (multiplier > 1) {
-                td.className = "analysis-weak";
-            } else if (multiplier < 1) {
-                td.className = "analysis-resistant";
-            } else {
-                td.className = "analysis-neutral";
-            }
-
-            tr.appendChild(td);
+            row.appendChild(createElement(
+                "td", multiplierClass(multiplier),
+                multiplierLabels[multiplier] ?? `${multiplier}×`
+            ));
         });
 
-        const defenseCell = document.createElement("td");
+        const defense = createElement("td");
+        if (resistantCount > 0) {
+            defense.className = "analysis-coverage-ok";
+            defense.textContent = `${resistantCount} resist / immune`;
+        } else {
+            row.classList.add("analysis-uncovered");
+            if (weakCount > 0) row.classList.add("analysis-exposed");
 
-        // Highlight attacking types nobody on the team resists.
-        if (resistantCount === 0) {
-            tr.classList.add("analysis-uncovered");
-            defenseCell.className = "analysis-coverage-gap";
+            defense.className = "analysis-coverage-gap";
+            defense.textContent = weakCount > 0
+                ? `No resistance (${weakCount} weak)`
+                : "No resistance";
 
-            if (weakCount > 0) {
-                tr.classList.add("analysis-exposed");
-                defenseCell.textContent =
-                    `No resistance (${weakCount} weak)`;
-            } else {
-                defenseCell.textContent = "No resistance";
-            }
-
-            // Find types that would provide a resistance or immunity.
-            const counters = possibleTypes.filter(defendingType =>
+            // Suggestions are individual types; a dual type may cancel a resistance.
+            const counters = available.filter(defendingType =>
                 matchupFactor(type, defendingType, generation) < 1
             );
-
-            const hint = document.createElement("small");
-            hint.className = "analysis-type-suggestion";
-
-            hint.textContent = counters.length
-                ? `Consider: ${counters.slice(0, 4).join(", ")}`
-                : "No single type resists this attack";
-
-            defenseCell.appendChild(hint);
-        } else {
-            defenseCell.className = "analysis-coverage-ok";
-            defenseCell.textContent =
-                `${resistantCount} resist / immune`;
+            defense.appendChild(createElement(
+                "small", "analysis-type-suggestion",
+                counters.length
+                    ? `Consider: ${counters.slice(0, 4).join(", ")}`
+                    : "No single type resists this attack"
+            ));
         }
 
-        tr.appendChild(defenseCell);
-        body.appendChild(tr);
+        row.appendChild(defense);
+        body.appendChild(row);
     });
 
     table.appendChild(body);
     wrapper.appendChild(table);
-    container.appendChild(wrapper);
-
-    // Keep the multiplier legend.
-    const legend = document.createElement("p");
-    legend.className = "analysis-legend";
-
-    legend.textContent =
-        "0× Immune · ¼× / ½× Resistant · 1× Neutral · " +
-        "2× Weak · 4× Very Weak";
-
-    container.appendChild(legend);
-
+    container.append(
+        wrapper,
+        createElement("p", "analysis-legend",
+            "0× Immune · ¼× / ½× Resistant · 1× Neutral · 2× Weak · 4× Very Weak")
+    );
     return container;
 }
 
-
-
-// ================== Automatic Type Analysis ==================
-
-let analysisRun = 0;
-
-const analysisSection = document.getElementById("type-analysis");
-const analysisOutput = document.getElementById("analysis-output");
-
 async function updateTypeAnalysis() {
     const run = ++analysisRun;
-
-    const currentTeam = selectedPokemon.slice();
     const currentGeneration = generationNumber(gen);
-    const selections = currentTeam.filter(Boolean);
-
-    // Hide the analysis when the team is empty.
-    if (selections.length === 0) {
-        analysisSection.hidden = true;
-        analysisOutput.replaceChildren();
-        return;
-    }
+    const selections = selectedPokemon.filter(Boolean);
 
     analysisSection.hidden = false;
-
     if (!analysisOutput.querySelector("table")) {
         analysisOutput.textContent = "Loading type matchups...";
     }
 
     try {
-        const details = await Promise.all(
-            selections.map(getAnalysisPokemonDetails)
-        );
-
-        // Ignore outdated results if the team changed again.
-        if (run !== analysisRun) {
-            return;
-        }
+        const details = await Promise.all(selections.map(getPokemonDetails));
+        if (run !== analysisRun) return;
 
         const members = selections.map((pokemon, index) => ({
             name: pokemon.name,
             types: typesInGeneration(details[index], currentGeneration)
         }));
-
-        analysisOutput.replaceChildren(
-            buildTypeAnalysis(members, currentGeneration)
-        );
-
+        analysisOutput.replaceChildren(buildTypeAnalysis(members, currentGeneration));
     } catch (error) {
-        if (run !== analysisRun) {
-            return;
-        }
-
+        if (run !== analysisRun) return;
         console.error("Type analysis failed:", error);
-
-        analysisOutput.textContent =
-            "Could not load Pokémon types. Please try again.";
+        analysisOutput.textContent = "Could not load Pokémon types. Please try again.";
     }
 }
 
+// ==================== Analysis tab navigation ====================
+function switchAnalysisTab(selectedTab) {
+    analysisTabs.forEach(tab => {
+        const active = tab === selectedTab;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-selected", String(active));
+        tab.tabIndex = active ? 0 : -1;
+        document.getElementById(tab.getAttribute("aria-controls")).hidden = !active;
+    });
+}
 
-// Application Initialization
-// Load Pokémon data when the script starts.
+// ==================== Event listeners and initialization ====================
+function initializeTeamSlots() {
+    for (let index = 0; index < TEAM_SIZE; index++) {
+        const card = createElement("article", "mon-card");
+        card.setAttribute("aria-label", `Slot ${index + 1}`);
+        team.appendChild(card);
+        teamSlots.push(card);
+    }
+}
+
+function initializeEvents() {
+    searchInput.addEventListener("input", updateSearch);
+    searchInput.addEventListener("focus", updateSearch);
+    searchInput.addEventListener("blur", () => {
+        searchResults.replaceChildren();
+        visiblePokemonMatches = [];
+    });
+
+    searchInput.addEventListener("keydown", event => {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            if (!visiblePokemonMatches.length) return;
+            event.preventDefault();
+            setHighlightedIndex(highlightedIndex + (event.key === "ArrowDown" ? 1 : -1));
+        } else if (event.key === "Enter") {
+            event.preventDefault();
+            selectPokemon(visiblePokemonMatches[highlightedIndex]);
+        }
+    });
+
+    // Event delegation avoids a separate click/hover handler for every result.
+    searchResults.addEventListener("pointermove", event => {
+        const result = event.target.closest("[data-pokemon-index]");
+        if (result) setHighlightedIndex(Number(result.dataset.pokemonIndex));
+    });
+    searchResults.addEventListener("mousedown", event => {
+        if (event.target.closest("[data-pokemon-index]")) event.preventDefault();
+    });
+    searchResults.addEventListener("click", event => {
+        const result = event.target.closest("[data-pokemon-index]");
+        if (result) selectPokemon(visiblePokemonMatches[Number(result.dataset.pokemonIndex)]);
+    });
+
+    gameSelect.addEventListener("change", resetTeamForNewGame);
+
+    analysisTabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => switchAnalysisTab(tab));
+        tab.addEventListener("keydown", event => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            const direction = event.key === "ArrowRight" ? 1 : -1;
+            const next = analysisTabs[(index + direction + analysisTabs.length) % analysisTabs.length];
+            switchAnalysisTab(next);
+            next.focus();
+        });
+    });
+}
+
+initializeTeamSlots();
+initializeEvents();
 loadPokemon();
 loadMoves();
+updateTypeAnalysis();
