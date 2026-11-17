@@ -34,8 +34,10 @@ const teamSlots = [];
 const pendingSlots = new Map();
 const pokemonDetailsCache = new Map();
 
+const generationVersionGroupsCache = new Map();
+const learnableMovesCache = new Map();
+
 let allPokemon = [];
-let allMoves = [];
 let visiblePokemonMatches = [];
 let highlightedIndex = 0;
 let gameVersion = 0;
@@ -71,15 +73,6 @@ async function loadPokemon() {
     }
 }
 
-async function loadMoves() {
-    try {
-        const data = await fetchJson(`${POKEAPI}/move?limit=1000`);
-        allMoves = data.results;
-    } catch (error) {
-        console.error("Could not load moves:", error);
-    }
-}
-
 // Caches the request itself, so simultaneous callers share one fetch.
 function getPokemonDetails(pokemon) {
     if (!pokemonDetailsCache.has(pokemon.url)) {
@@ -90,6 +83,54 @@ function getPokemonDetails(pokemon) {
         pokemonDetailsCache.set(pokemon.url, request);
     }
     return pokemonDetailsCache.get(pokemon.url);
+}
+
+// Get all version groups belonging to a generation.
+function getGenerationVersionGroups(generation) {
+    if (!generationVersionGroupsCache.has(generation)) {
+        const request = fetchJson(`${POKEAPI}/generation/${generation}`)
+            .then(data => new Set(
+                data.version_groups.map(group => group.name)
+            ))
+            .catch(error => {
+                generationVersionGroupsCache.delete(generation);
+                throw error;
+            });
+
+        generationVersionGroupsCache.set(generation, request);
+    }
+
+    return generationVersionGroupsCache.get(generation);
+}
+
+// Get all moves a Pokémon can learn in the selected generation.
+function getLearnableMoves(pokemon, generation) {
+    const key = `${pokemon.url}|${generation}`;
+
+    if (!learnableMovesCache.has(key)) {
+        const request = Promise.all([
+            getPokemonDetails(pokemon),
+            getGenerationVersionGroups(generation)
+        ])
+            .then(([details, versionGroups]) => {
+                return details.moves
+                    .filter(entry =>
+                        entry.version_group_details.some(detail =>
+                            versionGroups.has(detail.version_group.name)
+                        )
+                    )
+                    .map(entry => entry.move)
+                    .sort((a, b) => a.name.localeCompare(b.name));
+            })
+            .catch(error => {
+                learnableMovesCache.delete(key);
+                throw error;
+            });
+
+        learnableMovesCache.set(key, request);
+    }
+
+    return learnableMovesCache.get(key);
 }
 
 // ==================== Game and Pokémon search ====================
@@ -152,7 +193,7 @@ function clearSearch() {
     highlightedIndex = 0;
 }
 
-// ==================== Team cards and move selection ====================
+// ==================== Team cards and move search/selection ====================
 function selectedSprite(details) {
     return (
         (spriteGame && details.sprites.versions?.[gen]?.[spriteGame]?.front_default) ||
@@ -161,32 +202,7 @@ function selectedSprite(details) {
     );
 }
 
-function showMoveResults(matches, input, results, slotIndex, moveIndex) {
-    results.replaceChildren();
-
-    if (!matches.length) {
-        results.appendChild(createElement("div", "move-result", "No moves found."));
-        return;
-    }
-
-    matches.forEach(move => {
-        const result = createElement(
-            "div", "move-result", formatName(move.name.replace(/-(physical|special)$/i, ""))
-        );
-
-        result.addEventListener("mousedown", event => {
-            event.preventDefault(); // Keep the input focused while selecting.
-            input.value = result.textContent;
-            results.replaceChildren();
-            selectedMoves[slotIndex][moveIndex] = move;
-            updateTypeAnalysis(); // Move coverage will use these selections later.
-        });
-
-        results.appendChild(result);
-    });
-}
-
-function createMoveInput(slotIndex, moveIndex) {
+function createMoveInput(slotIndex, moveIndex, pokemon, generation) {
     const slot = createElement("div", "move-slot");
     const input = createElement("input", "move-search-input");
     const results = createElement("div", "move-search-results");
@@ -195,26 +211,294 @@ function createMoveInput(slotIndex, moveIndex) {
     input.placeholder = `Move ${moveIndex + 1}`;
     input.autocomplete = "off";
 
-    input.addEventListener("input", () => {
-        const query = input.value.trim().toLowerCase();
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-expanded", "false");
 
-        // Editing or clearing a field invalidates its former selection.
+    results.id = `move-results-${slotIndex}-${moveIndex}`;
+    results.setAttribute("role", "listbox");
+    input.setAttribute("aria-controls", results.id);
+
+    let availableMoves = null;
+    let loadingError = false;
+    let matches = [];
+    let highlighted = 0;
+
+    // Close the search dropdown.
+    function closeResults() {
+        matches = [];
+        highlighted = 0;
+
+        results.replaceChildren();
+
+        input.setAttribute("aria-expanded", "false");
+        input.removeAttribute("aria-activedescendant");
+    }
+
+    // Highlight a move using the mouse or arrow keys.
+    function setMoveHighlight(index) {
+        if (!matches.length) return;
+
+        highlighted = Math.max(
+            0,
+            Math.min(index, matches.length - 1)
+        );
+
+        results.querySelectorAll("[data-move-index]").forEach((result, i) => {
+            const active = i === highlighted;
+
+            result.classList.toggle("highlighted", active);
+            result.setAttribute("aria-selected", String(active));
+        });
+
+        input.setAttribute(
+            "aria-activedescendant",
+            `move-option-${slotIndex}-${moveIndex}-${highlighted}`
+        );
+    }
+
+    // Display a message when there are no available results.
+    function showMessage(message) {
+        matches = [];
+
+        results.replaceChildren(
+            createElement("div", "move-result is-empty", message)
+        );
+
+        input.setAttribute("aria-expanded", "true");
+        input.removeAttribute("aria-activedescendant");
+    }
+
+    // Update the list of matching moves.
+    function refreshResults() {
+        const query = input.value
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, "-");
+
+        if (!query) {
+            closeResults();
+            return;
+        }
+
+        if (loadingError) {
+            showMessage("Could not load moves. Refocus to retry.");
+            return;
+        }
+
+        if (!availableMoves) {
+            showMessage("Loading available moves...");
+            return;
+        }
+
+        // Find moves already assigned to this Pokémon.
+        const usedMoves = new Set(
+            selectedMoves[slotIndex]
+                .filter((move, index) =>
+                    index !== moveIndex && move !== null
+                )
+                .map(move => move.name)
+        );
+
+        // Only show learnable moves that aren't duplicates.
+        matches = availableMoves
+            .filter(move =>
+                move.name.includes(query) &&
+                !usedMoves.has(move.name)
+            )
+            .slice(0, 6);
+
+        highlighted = 0;
+        results.replaceChildren();
+
+        input.setAttribute("aria-expanded", "true");
+
+        if (!matches.length) {
+            showMessage("No learnable moves found.");
+            return;
+        }
+
+        // Create the result elements.
+        matches.forEach((move, index) => {
+            const result = createElement(
+                "div",
+                "move-result",
+                formatName(
+                    move.name.replace(/-(physical|special)$/i, "")
+                )
+            );
+
+            result.id = `move-option-${slotIndex}-${moveIndex}-${index}`;
+            result.dataset.moveIndex = String(index);
+            result.setAttribute("role", "option");
+            result.setAttribute("aria-selected", String(index === 0));
+
+            result.classList.toggle("highlighted", index === 0);
+
+            results.appendChild(result);
+        });
+
+        // Automatically highlight the first move.
+        setMoveHighlight(0);
+    }
+
+    // Save a selected move.
+    function selectMove(move) {
+        if (!move) return;
+
+        // Verify that the move is learnable.
+        if (!availableMoves?.some(allowed =>
+            allowed.name === move.name
+        )) return;
+
+        // Verify that the Pokémon still occupies this slot.
+        if (
+            selectedPokemon[slotIndex] !== pokemon ||
+            gen !== generation
+        ) return;
+
+        // Prevent the same Pokémon from having duplicate moves.
+        const duplicate = selectedMoves[slotIndex].some(
+            (selected, index) =>
+                index !== moveIndex &&
+                selected?.name === move.name
+        );
+
+        if (duplicate) return;
+
+        selectedMoves[slotIndex][moveIndex] = move;
+
+        input.value = formatName(
+            move.name.replace(/-(physical|special)$/i, "")
+        );
+
+        closeResults();
+        updateTypeAnalysis();
+    }
+
+    // ==================== Input Events ====================
+
+    // Update results as the user types.
+    input.addEventListener("input", () => {
+        // Editing a selected move clears that selection.
         if (selectedMoves[slotIndex][moveIndex] !== null) {
             selectedMoves[slotIndex][moveIndex] = null;
             updateTypeAnalysis();
         }
 
-        if (!query) {
-            results.replaceChildren();
-            return;
-        }
-
-        const matches = allMoves.filter(move => move.name.includes(query)).slice(0, 6);
-        showMoveResults(matches, input, results, slotIndex, moveIndex);
+        refreshResults();
     });
 
-    input.addEventListener("blur", () => results.replaceChildren());
+    // Show matching moves when the input receives focus.
+    input.addEventListener("focus", () => {
+        if (loadingError) {
+            loadingError = false;
+            loadLearnset();
+        }
+
+        refreshResults();
+    });
+
+    // Hide results when focus leaves the input.
+    input.addEventListener("blur", closeResults);
+
+    // Keyboard navigation.
+    input.addEventListener("keydown", event => {
+        if (
+            event.key === "ArrowDown" ||
+            event.key === "ArrowUp"
+        ) {
+            if (!matches.length) return;
+
+            event.preventDefault();
+
+            const direction = event.key === "ArrowDown" ? 1 : -1;
+
+            setMoveHighlight(highlighted + direction);
+
+        } else if (event.key === "Enter") {
+            if (!matches.length) return;
+
+            event.preventDefault();
+            selectMove(matches[highlighted]);
+
+        } else if (event.key === "Escape") {
+            closeResults();
+        }
+    });
+
+    // Highlight results when hovering with the mouse.
+    results.addEventListener("pointermove", event => {
+        const result = event.target.closest("[data-move-index]");
+
+        if (result) {
+            setMoveHighlight(Number(result.dataset.moveIndex));
+        }
+    });
+
+    // Select a result when clicking.
+    results.addEventListener("pointerdown", event => {
+        const result = event.target.closest("[data-move-index]");
+
+        if (!result) return;
+
+        event.preventDefault();
+
+        selectMove(matches[Number(result.dataset.moveIndex)]);
+    });
+
+    // Support clicks from accessibility tools.
+    results.addEventListener("click", event => {
+        const result = event.target.closest("[data-move-index]");
+
+        if (result) {
+            selectMove(matches[Number(result.dataset.moveIndex)]);
+        }
+    });
+
+    // ==================== Learnset Loading ====================
+
+    async function loadLearnset() {
+        try {
+            const moves = await getLearnableMoves(pokemon, generation);
+
+            // Ignore results if the Pokémon was removed or game changed.
+            if (
+                !slot.isConnected ||
+                selectedPokemon[slotIndex] !== pokemon ||
+                gen !== generation
+            ) return;
+
+            availableMoves = moves;
+            loadingError = false;
+
+            if (document.activeElement === input) {
+                refreshResults();
+            }
+
+        } catch (error) {
+            if (
+                !slot.isConnected ||
+                selectedPokemon[slotIndex] !== pokemon ||
+                gen !== generation
+            ) return;
+
+            loadingError = true;
+
+            console.error(
+                `Could not load learnset for ${pokemon.name}:`,
+                error
+            );
+
+            if (document.activeElement === input) {
+                refreshResults();
+            }
+        }
+    }
+
     slot.append(input, results);
+    loadLearnset();
+
     return slot;
 }
 
@@ -240,7 +524,7 @@ function renderPokemonCard(pokemon, slotIndex, sprite) {
     removeButton.addEventListener("click", () => removePokemon(slotIndex));
 
     for (let i = 0; i < MOVES_PER_POKEMON; i++) {
-        moves.appendChild(createMoveInput(slotIndex, i));
+        moves.appendChild(createMoveInput(slotIndex, i, pokemon, gen));
     }
 
     card.replaceChildren(image, name, moves, removeButton);
@@ -400,7 +684,8 @@ function multiplierClass(multiplier) {
     if (multiplier === 0) return "analysis-immune";
     if (multiplier === 4) return "analysis-weak analysis-quad";
     if (multiplier > 1) return "analysis-weak";
-    if (multiplier < 1) return "analysis-resistant";
+    if (multiplier === 0.25) return "analysis-quarter";
+    if (multiplier === 0.5) return "analysis-resistant";
     return "analysis-neutral";
 }
 
@@ -594,5 +879,3 @@ function initializeEvents() {
 initializeTeamSlots();
 initializeEvents();
 loadPokemon();
-loadMoves();
-updateTypeAnalysis();

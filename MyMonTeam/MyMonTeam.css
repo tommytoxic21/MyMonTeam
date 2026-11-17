@@ -27,9 +27,8 @@ body {
 }
 
 .page {
-    max-width: 1180px;
     margin: 0 auto;
-    padding: 32px 20px 64px;
+    padding: 32px 100px 32px;
 }
 
 /* ==================== Header ==================== */
@@ -185,7 +184,7 @@ input[type="search"]:focus {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    min-height: 220px;
+    min-height: 310px;
     padding-top: 12px;
     background: var(--panel);
     border: 1px solid var(--line);
@@ -283,14 +282,18 @@ input[type="search"]:focus {
     background: rgba(139, 124, 184, 0.25);
 }
 
+.move-result.highlighted {
+    background: rgba(139, 124, 184, 0.4);
+}
+
+.move-result.is-empty {
+    color: var(--muted);
+    cursor: default;
+}
+
 /* ==================== Defensive type analysis ==================== */
 .analysis-panel {
     margin-top: 32px;
-}
-
-.analysis-panel[hidden],
-.analysis-tab-content [hidden] {
-    display: none;
 }
 
 .analysis-table-scroll {
@@ -358,6 +361,10 @@ input[type="search"]:focus {
     background: rgba(218, 67, 77, 0.42);
 }
 
+.analysis-quarter {
+    background: rgba(57, 145, 96, 0.39);
+}
+
 .analysis-resistant {
     color: #c2f5d2;
     background: rgba(57, 145, 96, 0.2);
@@ -381,7 +388,6 @@ input[type="search"]:focus {
 
 .analysis-coverage-gap {
     min-width: 230px;
-    background: rgba(233, 185, 110, 0.12);
     color: #ffd39b;
     font-weight: 700;
 }
@@ -391,7 +397,6 @@ input[type="search"]:focus {
 }
 
 .analysis-exposed .analysis-coverage-gap {
-    background: rgba(218, 67, 77, 0.2);
     color: #ffd8d8;
 }
 
